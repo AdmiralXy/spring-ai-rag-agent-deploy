@@ -63,7 +63,7 @@ services:
       - 'traefik.http.services.backend-spring-ai-rag-agent.loadbalancer.server.port=8080'
 
   spring-ai-rag-agent-ui:
-    image: ghcr.io/admiralxy/spring-ai-rag-agent-ui:1758762749
+    image: ghcr.io/admiralxy/spring-ai-rag-agent-ui:1758825713
     container_name: spring-ai-rag-agent-ui
     restart: always
     networks:
