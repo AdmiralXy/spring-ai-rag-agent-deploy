@@ -1,7 +1,7 @@
 services:
-  postgres:
+  spring-ai-rag-agent-postgres:
     image: pgvector/pgvector:pg17-trixie
-    container_name: postgres
+    container_name: spring-ai-rag-agent-postgres
     restart: always
     networks:
       - traefik-network
@@ -43,7 +43,7 @@ services:
     networks:
       - traefik-network
     depends_on:
-      - postgres
+      - spring-ai-rag-agent-postgres
       - ollama
     environment:
       DATABASE_URL: ${DATABASE_URL}
