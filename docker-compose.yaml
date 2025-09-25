@@ -1,7 +1,6 @@
 services:
   spring-ai-postgres:
     image: pgvector/pgvector:pg17-trixie
-    container_name: spring-ai-postgres
     restart: always
     networks:
       - traefik-network
@@ -16,7 +15,6 @@ services:
 
   ollama:
     image: ollama/ollama:0.12.0
-    container_name: ollama
     restart: always
     networks:
       - traefik-network
@@ -38,7 +36,6 @@ services:
 
   spring-ai-rag-agent:
     image: ghcr.io/admiralxy/spring-ai-rag-agent:17993894033
-    container_name: spring-ai-rag-agent
     restart: always
     networks:
       - traefik-network
@@ -64,7 +61,6 @@ services:
 
   spring-ai-rag-agent-ui:
     image: ghcr.io/admiralxy/spring-ai-rag-agent-ui:1758825713
-    container_name: spring-ai-rag-agent-ui
     restart: always
     networks:
       - traefik-network
