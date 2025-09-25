@@ -69,7 +69,7 @@ services:
     networks:
       - traefik-network
     environment:
-      NUXT_PUBLIC_API_BASE: ${APPLICATION_DOMAIN}/api/agent
+      NUXT_PUBLIC_API_BASE: https://${APPLICATION_DOMAIN}/api/agent
     labels:
       - 'traefik.enable=true'
       - 'traefik.http.routers.spring-ai-rag-agent-ui-http.rule=Host(`${APPLICATION_DOMAIN}`)'
