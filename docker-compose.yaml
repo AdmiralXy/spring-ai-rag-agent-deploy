@@ -78,3 +78,7 @@ services:
       - 'traefik.http.routers.spring-ai-rag-agent-ui.entrypoints=websecure'
       - 'traefik.http.routers.spring-ai-rag-agent-ui.tls.certresolver=myresolver'
       - 'traefik.http.services.frontend-spring-ai-rag-agent-ui.loadbalancer.server.port=3000'
+
+networks:
+  traefik-network:
+    external: true
