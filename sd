@@ -45,7 +45,7 @@ start() {
 }
 
 stop() {
-    docker-compose -p service-delivery-minio down
+    docker-compose -p spring-ai-agent down
 }
 
 print_box() {
