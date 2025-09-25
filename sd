@@ -1,0 +1,359 @@
+#!/bin/bash
+
+USAGE_INFO_MESSAGE="\033[0;31mError, run one of the following configurations:\033[0m\n./sd [init|install|clear|clear-storage|status|resources]\n./sd [start|stop|restart]\n"
+STORAGE_DIR="storage"
+
+set -e
+
+get_env_value() {
+    key=$1
+    env_file=${2:-.env}
+
+    if [ ! -f "$env_file" ]; then
+        print "File $env_file not found" "ERROR"
+        return 1
+    fi
+
+    value=$(grep -m 1 "^$key=" "$env_file" | cut -d '=' -f2 | tr -d '\r')
+
+    if [ -z "$value" ]; then
+        print "Key '$key' not found in $env_file file" "ERROR"
+        return 1
+    fi
+
+    echo "$value"
+}
+
+start() {
+    docker-compose -p $1 $2 --env-file .env up -d
+
+    variables=(
+          "VERSION:Version"
+          "PROFILE:Profile"
+    )
+
+    for var_desc in "${variables[@]}"; do
+          var=$(echo "$var_desc" | cut -d':' -f1)
+          desc=$(echo "$var_desc" | cut -d':' -f2)
+          env_value=$(get_env_value "$var")
+          value=${env_value:-"Not set"}
+
+          new_values+=("${desc}:${value}")
+      done
+
+    print_box "Running..." "${new_values[@]}"
+}
+
+stop() {
+    docker-compose -p service-delivery-minio down
+}
+
+print_box() {
+    name=$(get_env_value "APPLICATION_NAME" ".env.example")
+    message="$1"
+    title="$name @ $message"
+    cyan='\033[0;36m'
+    green='\033[0;32m'
+    reset='\033[0m'
+    width=90
+
+    echo -e "${green}┌$(printf '─%.0s' $(seq 1 $width))┐${reset}"
+    printf "${green}│${reset} ${green}%-*s${reset} ${green}│${reset} ${green}%s${reset}\n" $((width - 2)) "$title"
+    echo -e "${green}├$(printf '─%.0s' $(seq 1 $width))┤${reset}"
+
+    shift
+
+    for pair in "$@"; do
+      key=$(echo "$pair" | cut -d':' -f1)
+      value=$(echo "$pair" | cut -d':' -f2)
+      printf "${green}│${reset} ${cyan}⯈ %-34s${reset}: %-*s ${green}│${reset}\n" "$key" $((width - 40)) "$value"
+    done
+
+    echo -e "${green}└$(printf '─%.0s' $(seq 1 $width))┘${reset}"
+}
+
+initialize() {
+  generate_random_password() {
+      CHARACTERS='0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ!@%^&*'
+      PASSWORD_LENGTH=20
+      LC_ALL=C tr -dc "$CHARACTERS" < /dev/urandom | head -c $PASSWORD_LENGTH
+  }
+
+  cp .env.example .env
+
+  variables=(
+      "VERSION:Version"
+  )
+
+  new_values=()
+  for var_desc in "${variables[@]}"; do
+      var=$(echo "$var_desc" | cut -d':' -f1)
+      desc=$(echo "$var_desc" | cut -d':' -f2)
+
+      if [ "$var" = "VERSION" ]; then
+          new_value=$(openssl rand -hex 3)
+      else
+          new_value=$(generate_random_password)
+      fi
+
+      awk -v var="$var" -v new_value="$new_value" '
+      BEGIN { found = 0 }
+      {
+          if ($0 ~ "^"var"=") {
+              print var"="new_value
+              found = 1
+          } else {
+              print
+          }
+      }
+      END {
+          if (!found) {
+              print var"="new_value
+          }
+      }' .env > .env.tmp && mv .env.tmp .env
+      new_values+=("${desc}:${new_value}")
+  done
+
+  print_box "Initialized" "${new_values[@]}"
+}
+
+print() {
+    local text="$1"
+    local color="$2"
+
+    local NC='\033[0m'
+    local RED='\033[0;31m'
+    local GREEN='\033[0;32m'
+    local YELLOW='\033[0;33m'
+    local BLUE='\033[0;34m'
+
+    case "$color" in
+        "ERROR")
+            printf "${RED}%s${NC}\n" "$text"
+            ;;
+        "SUCCESS")
+            printf "${GREEN}%s${NC}\n" "$text"
+            ;;
+        "WARNING")
+            printf "${YELLOW}%s${NC}\n" "$text"
+            ;;
+        "INFO")
+            printf "${BLUE}%s${NC}\n" "$text"
+            ;;
+        *)
+            printf "%s\n" "$text"
+            ;;
+    esac
+}
+
+initialize_storage() {
+    if [ ! -d "$STORAGE_DIR" ]; then
+        print "Creating $STORAGE_DIR directory..." "INFO"
+        mkdir -p "$STORAGE_DIR"
+        mkdir -p certs
+        chmod -R 777 "$STORAGE_DIR"
+        chmod -R 600 certs
+    fi
+}
+
+clear_storage() {
+    if [ -d "$STORAGE_DIR" ]; then
+        print "Clearing $STORAGE_DIR directory..." "INFO"
+        stop
+        rm -rf "$STORAGE_DIR"
+    fi
+}
+
+check_unix_system() {
+    if uname | grep -iq "linux"; then
+        return 0
+    elif uname | grep -iq "darwin"; then
+        return 0
+    elif uname | grep -iq "unix"; then
+        return 0
+    else
+        print "Abort. Command is only for Unix systems." "ERROR"
+        exit 1
+    fi
+}
+
+if [ "$1" = "init" ]; then
+    clear_storage
+    initialize
+    exit 0
+fi
+
+if [ -f .env ]; then
+    export APPLICATION_NAME=$(grep -m 1 '^APPLICATION_NAME=' .env | cut -d '=' -f2 | tr -d '\r')
+    export PROFILE=$(grep -m 1 '^PROFILE=' .env | cut -d '=' -f2 | tr -d '\r')
+    export METRICS_ENABLED=$(grep -m 1 '^METRICS_ENABLED=' .env | cut -d '=' -f2 | tr -d '\r')
+    export DATABASE_ENABLED=$(grep -m 1 '^DATABASE_ENABLED=' .env | cut -d '=' -f2 | tr -d '\r')
+    export DATABASE_BACKUPS_ENABLED=$(grep -m 1 '^DATABASE_BACKUPS_ENABLED=' .env | cut -d '=' -f2 | tr -d '\r')
+else
+    print "Please initialize project with ./sd init" "WARNING"
+    exit 1
+fi
+
+if [ "$1" = "install" ]; then
+    check_unix_system
+    if [ "$EUID" -ne 0 ]; then
+        print "Please run as root" "ERROR"
+        exit 1
+    fi
+    print "[SD Installer] Installing Docker and Docker Compose..." "INFO"
+    apt-get update
+    apt-get upgrade
+    apt-get install -y docker.io
+
+    if [ ! -f /usr/local/bin/docker-compose ]; then
+      curl -L "https://github.com/docker/compose/releases/download/v2.32.1/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
+      chmod +x /usr/local/bin/docker-compose
+      if [ -x "$(command -v docker-compose)" ]; then
+          print "[SD Installer] Docker Compose have been successfully installed." "SUCCESS"
+      else
+          print "[SD Installer] Docker Compose installation failed." "ERROR"
+          exit 1
+      fi
+    fi
+
+    DOCKER_CONFIG_FILE="/etc/docker/daemon.json"
+
+    if [ ! -f "$DOCKER_CONFIG_FILE" ]; then
+        echo '{
+      "log-driver": "local",
+      "log-opts": {
+        "max-size": "50m"
+      }
+    }' > $DOCKER_CONFIG_FILE
+        print "[SD Installer] Docker configuration file created: $DOCKER_CONFIG_FILE" "SUCCESS"
+    fi
+
+    if [ ! -f /swapfile ]; then
+      fallocate -l 3G /swapfile
+      ls -lh /swapfile
+      chmod 600 /swapfile
+      mkswap /swapfile
+      swapon /swapfile
+      swapon --show
+    fi
+
+    if swapon --show | grep -q '/swapfile'; then
+        print "[SD Installer] Swap file '/swapfile' is successfully activated." "SUCCESS"
+    else
+        print "[SD Installer] Swap file '/swapfile' is not activated." "ERROR"
+        exit 1
+    fi
+
+    if ! grep -q '/swapfile none swap sw 0 0' /etc/fstab; then
+      echo '/swapfile none swap sw 0 0' | sudo tee -a /etc/fstab
+    fi
+
+    if ! grep -q '^vm.swappiness=10' /etc/sysctl.conf; then
+      echo 'vm.swappiness=10' | sudo tee -a /etc/sysctl.conf
+    fi
+
+    if ! grep -q '^vm.vfs_cache_pressure=50' /etc/sysctl.conf; then
+      echo 'vm.vfs_cache_pressure=50' | sudo tee -a /etc/sysctl.conf
+    fi
+
+    exit 0
+fi
+
+if [ "$1" = "status" ]; then
+    print "Checking Docker containers status..." "INFO"
+    docker ps -a
+    exit 0
+fi
+
+if [ "$1" = "resources" ]; then
+    while true; do
+        clear
+        print "Monitoring system resources..." "INFO"
+        print "Press [Ctrl+C] to stop..." "WARNING"
+        CPU_USAGE=$(top -bn1 | grep "Cpu(s)" | sed "s/.*, *\([0-9.]*\)%* id.*/\1/" | awk '{print 100 - $1"%"}')
+        RAM_FREE=$(free -h | grep "Mem" | awk '{print $4"/"$2}')
+        DISK_USAGE=$(df -h | grep "/$" | awk '{print $3"/"$2}')
+        echo "CPU Usage: $CPU_USAGE"
+        echo "RAM Free/Total: $RAM_FREE"
+        echo "Disk Usage (Root): $DISK_USAGE"
+        sleep 2
+    done
+fi
+
+if [ "$1" = "clear" ]; then
+    print "Clearing Docker containers, images, networks and volumes..." "INFO"
+    docker stop $(docker ps -qa) > /dev/null 2>&1
+    docker rm $(docker ps -qa) > /dev/null 2>&1
+    docker rmi -f $(docker images -qa) > /dev/null 2>&1
+    docker volume rm $(docker volume ls -q) > /dev/null 2>&1
+    docker network rm $(docker network ls -q) > /dev/null 2>&1
+    docker system prune -af > /dev/null 2>&1
+    print "Docker resources have been successfully cleared." "SUCCESS"
+    exit 0
+fi
+
+if [ "$1" = "clear-storage" ]; then
+    stop "$APPLICATION_NAME"
+    clear_storage
+    print "Storage have been successfully cleared." "SUCCESS"
+    exit 0
+fi
+
+if [ -z "$APPLICATION_NAME" ]; then
+    print "APPLICATION_NAME is not set in .env file." "ERROR"
+    exit 1
+fi
+
+if [ -z "$PROFILE" ]; then
+    print "PROFILE must be set to 'local' or 'production' in .env file." "ERROR"
+    exit 1
+fi
+
+if [ "$PROFILE" != "local" ] && [ "$PROFILE" != "production" ]; then
+    print "Invalid PROFILE value. Must be 'local' or 'production' in .env file." "ERROR"
+    exit 1
+fi
+
+if [ $# -lt 1 ]; then
+    printf "$USAGE_INFO_MESSAGE"
+    exit 1
+fi
+
+ACTION=$1
+
+case $PROFILE in
+    local)
+        DOCKER_MODE="local"
+        ;;
+    production)
+        DOCKER_MODE="remote"
+        ;;
+    *)
+        print "Invalid PROFILE value in .env file." "ERROR"
+        exit 1
+        ;;
+esac
+
+DOCKER_COMPOSE_FILES="-f docker-compose.yaml"
+
+case $ACTION in
+    start)
+        print "Starting $PROFILE configuration for $APPLICATION_NAME..." "INFO"
+        initialize_storage
+        start "$APPLICATION_NAME" "$DOCKER_COMPOSE_FILES"
+        ;;
+    stop)
+        print "Stopping $APPLICATION_NAME..." "INFO"
+        stop "$APPLICATION_NAME" "$DOCKER_COMPOSE_FILES"
+        ;;
+    restart)
+        print "Restarting $APPLICATION_NAME..." "INFO"
+        stop "$APPLICATION_NAME" "$DOCKER_COMPOSE_FILES"
+        initialize_storage
+        start "$APPLICATION_NAME" "$DOCKER_COMPOSE_FILES"
+        ;;
+    *)
+        printf "$USAGE_INFO_MESSAGE"
+        exit 1
+        ;;
+esac
