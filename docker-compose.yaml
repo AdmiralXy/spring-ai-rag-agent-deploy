@@ -12,6 +12,10 @@ services:
       POSTGRES_DB: ai
       POSTGRES_USER: ${DATABASE_USERNAME}
       POSTGRES_PASSWORD: ${DATABASE_PASSWORD}
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U ${DATABASE_USERNAME} -d ai" ]
+      interval: 5s
+      retries: 5
 
   ollama:
     image: ollama/ollama:0.12.0
