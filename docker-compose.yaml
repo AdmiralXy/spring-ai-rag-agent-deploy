@@ -39,7 +39,7 @@ services:
        wait"
 
   spring-ai-rag-agent:
-    image: ghcr.io/admiralxy/spring-ai-rag-agent:17993894034
+    image: ghcr.io/admiralxy/spring-ai-rag-agent:17993894035
     restart: always
     networks:
       - traefik-network
