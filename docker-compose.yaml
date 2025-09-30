@@ -39,7 +39,7 @@ services:
        wait"
 
   spring-ai-rag-agent:
-    image: ghcr.io/admiralxy/spring-ai-rag-agent:17993894033
+    image: ghcr.io/admiralxy/spring-ai-rag-agent:17993894034
     restart: always
     networks:
       - traefik-network
@@ -64,7 +64,7 @@ services:
       - 'traefik.http.services.backend-spring-ai-rag-agent.loadbalancer.server.port=8080'
 
   spring-ai-rag-agent-ui:
-    image: ghcr.io/admiralxy/spring-ai-rag-agent-ui:1758825713
+    image: ghcr.io/admiralxy/spring-ai-rag-agent-ui:1758825714
     restart: always
     networks:
       - traefik-network
